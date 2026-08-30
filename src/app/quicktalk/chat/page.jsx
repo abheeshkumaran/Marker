@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 export default function QuickTalkChatPage() {
@@ -23,9 +24,17 @@ export default function QuickTalkChatPage() {
     const [showRequests, setShowRequests] = useState(false);
     const [actingId, setActingId] = useState(null);
 
+    // accepted connections
+    const [connections, setConnections] = useState([]);
+
     const loadRequests = useCallback(async () => {
         const res = await fetch('/api/talk/requests');
         if (res.ok) setRequests(await res.json());
+    }, []);
+
+    const loadConnections = useCallback(async () => {
+        const res = await fetch('/api/talk/connections');
+        if (res.ok) setConnections((await res.json()).connections || []);
     }, []);
 
     // Identify this browser's user; bounce to login if there's no session.
@@ -46,15 +55,19 @@ export default function QuickTalkChatPage() {
             } catch {}
 
             loadRequests();
+            loadConnections();
         })();
-    }, [router, loadRequests]);
+    }, [router, loadRequests, loadConnections]);
 
-    // Poll for new incoming requests so the indicator stays fresh.
+    // Poll so the requests indicator and connections list stay fresh.
     useEffect(() => {
         if (checking) return;
-        const t = setInterval(loadRequests, 15000);
+        const t = setInterval(() => {
+            loadRequests();
+            loadConnections();
+        }, 15000);
         return () => clearInterval(t);
-    }, [checking, loadRequests]);
+    }, [checking, loadRequests, loadConnections]);
 
     // Debounced lookup as the user types a connecting code.
     useEffect(() => {
@@ -111,6 +124,7 @@ export default function QuickTalkChatPage() {
                 body: JSON.stringify({ action }),
             });
             await loadRequests();
+            if (action === 'accept') await loadConnections();
         } finally {
             setActingId(null);
         }
@@ -326,6 +340,26 @@ export default function QuickTalkChatPage() {
                         >
                             {sendMsg.text}
                         </p>
+                    )}
+
+                    {connections.length > 0 && (
+                        <div className="mt-4 border-t border-gray-100 pt-3">
+                            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                Connected
+                            </h3>
+                            <ul className="mt-2 space-y-1">
+                                {connections.map((c) => (
+                                    <li key={c.connectionId}>
+                                        <Link
+                                            href={`/quicktalk/room/${c.connectionId}`}
+                                            className="block rounded-md px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50"
+                                        >
+                                            {c.user.username}
+                                        </Link>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
                     )}
                 </div>
             </div>
