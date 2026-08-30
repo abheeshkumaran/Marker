@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 function IncomeIcon(props) {
     return (
         <svg
@@ -55,24 +57,33 @@ function QuickTalkIcon(props) {
 const buttons = [
     { label: 'Income', Icon: IncomeIcon, className: 'bg-emerald-600 hover:bg-emerald-700' },
     { label: 'Expense', Icon: ExpenseIcon, className: 'bg-rose-600 hover:bg-rose-700' },
-    { label: 'QuickTalk', Icon: QuickTalkIcon, className: 'bg-indigo-600 hover:bg-indigo-700' },
+    {
+        label: 'QuickTalk',
+        Icon: QuickTalkIcon,
+        href: '/quicktalk',
+        className: 'bg-indigo-600 hover:bg-indigo-700',
+    },
 ];
 
 export default function Home() {
     return (
         <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-gray-100 p-6">
-            <h1 className="mb-2 text-2xl font-bold text-gray-900">marker app</h1>
+            <h1 className="mb-2 text-2xl font-bold text-gray-900">mark Your Destiny</h1>
 
-            {buttons.map(({ label, Icon, className }) => (
-                <button
-                    key={label}
-                    type="button"
-                    className={`flex w-64 items-center gap-3 rounded-lg px-5 py-3 text-base font-semibold text-white shadow transition ${className}`}
-                >
-                    <Icon className="h-5 w-5 shrink-0" />
-                    <span>{label}</span>
-                </button>
-            ))}
+            {buttons.map(({ label, Icon, className, href }) => {
+                const cls = `flex w-64 items-center gap-3 rounded-lg px-5 py-3 text-base font-semibold text-white shadow transition ${className}`;
+                return href ? (
+                    <Link key={label} href={href} className={cls}>
+                        <Icon className="h-5 w-5 shrink-0" />
+                        <span>{label}</span>
+                    </Link>
+                ) : (
+                    <button key={label} type="button" className={cls}>
+                        <Icon className="h-5 w-5 shrink-0" />
+                        <span>{label}</span>
+                    </button>
+                );
+            })}
         </main>
     );
 }
