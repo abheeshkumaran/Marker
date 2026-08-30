@@ -21,6 +21,11 @@ const UserSchema = new mongoose.Schema(
             unique: true,
             sparse: true,
         },
+        // updated on chat activity — used for the WhatsApp-style "last seen"
+        lastSeenAt: {
+            type: Date,
+            default: null,
+        },
     },
     { timestamps: true },
 );
