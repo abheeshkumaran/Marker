@@ -11,6 +11,12 @@ export default function QuickTalkChatPage() {
     const [storeChat, setStoreChat] = useState(false); // false = clear after chat
     const [copied, setCopied] = useState(false);
 
+    // "find the chat" — look up another user by connecting code
+    const [code, setCode] = useState('');
+    const [finding, setFinding] = useState(false);
+    const [found, setFound] = useState(null); // null | { username, isSelf } | 'notfound'
+    const [connectedTo, setConnectedTo] = useState(null);
+
     // Identify this browser's user; bounce to login if there's no session.
     useEffect(() => {
         (async () => {
@@ -29,6 +35,44 @@ export default function QuickTalkChatPage() {
             } catch {}
         })();
     }, [router]);
+
+    // Debounced lookup as the user types a connecting code.
+    useEffect(() => {
+        const q = code.trim();
+        setConnectedTo(null);
+        if (q.length < 3) {
+            setFound(null);
+            setFinding(false);
+            return;
+        }
+
+        setFinding(true);
+        const t = setTimeout(async () => {
+            try {
+                const res = await fetch(
+                    `/api/talk/lookup?code=${encodeURIComponent(q)}`,
+                );
+                if (res.ok) {
+                    const body = await res.json();
+                    setFound(body.user);
+                } else {
+                    setFound('notfound');
+                }
+            } catch {
+                setFound('notfound');
+            } finally {
+                setFinding(false);
+            }
+        }, 400);
+
+        return () => clearTimeout(t);
+    }, [code]);
+
+    const connect = () => {
+        if (found && found !== 'notfound') {
+            setConnectedTo(found.username);
+        }
+    };
 
     const toggleStore = () => {
         setStoreChat((v) => {
@@ -164,6 +208,59 @@ export default function QuickTalkChatPage() {
                             </div>
                         )}
                     </div>
+                </div>
+
+                {/* find the chat */}
+                <div className="mt-6 rounded-lg bg-white p-4 shadow-sm">
+                    <label
+                        htmlFor="findChat"
+                        className="block text-sm font-medium text-gray-700"
+                    >
+                        find the chat
+                    </label>
+                    <input
+                        id="findChat"
+                        type="text"
+                        value={code}
+                        onChange={(e) => setCode(e.target.value)}
+                        placeholder="Enter a connecting code"
+                        className="mt-2 block w-full rounded-md border-gray-300 font-mono shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                    />
+
+                    {finding && (
+                        <p className="mt-2 text-sm text-gray-500">Searching…</p>
+                    )}
+
+                    {!finding && found === 'notfound' && (
+                        <p className="mt-2 text-sm text-red-600">
+                            No user has that connecting code.
+                        </p>
+                    )}
+
+                    {!finding && found && found !== 'notfound' && (
+                        <div className="mt-3 flex items-center justify-between rounded-md border border-gray-200 p-3">
+                            <span className="text-sm text-gray-800">
+                                User:{' '}
+                                <strong>{found.username}</strong>
+                                {found.isSelf && (
+                                    <span className="text-gray-400"> (you)</span>
+                                )}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={connect}
+                                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+                            >
+                                Connect
+                            </button>
+                        </div>
+                    )}
+
+                    {connectedTo && (
+                        <p className="mt-2 text-sm font-medium text-emerald-700">
+                            Connected with {connectedTo}.
+                        </p>
+                    )}
                 </div>
             </div>
         </main>
