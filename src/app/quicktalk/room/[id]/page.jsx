@@ -11,13 +11,16 @@ export default function ChatRoomPage() {
     const [peer, setPeer] = useState(null);
     const [me, setMe] = useState(null);
     const [messages, setMessages] = useState([]);
+    const [store, setStore] = useState(false);
     const [text, setText] = useState('');
     const [error, setError] = useState(null);
     const [ready, setReady] = useState(false);
 
-    // Start "empty" on every load — a refresh clears THIS client's view only.
-    const sinceRef = useRef(Date.now());
+    const mountTimeRef = useRef(Date.now());
+    const sinceRef = useRef(0); // ask server from the beginning on first poll
     const seenRef = useRef(new Set());
+    const storeRef = useRef(false);
+    const initRef = useRef(false);
     const bottomRef = useRef(null);
 
     useEffect(() => {
@@ -46,19 +49,39 @@ export default function ChatRoomPage() {
                 setPeer(body.peer);
                 setReady(true);
 
-                if (body.messages?.length) {
-                    const fresh = body.messages.filter(
-                        (m) => !seenRef.current.has(m.id),
-                    );
-                    fresh.forEach((m) => seenRef.current.add(m.id));
-                    if (fresh.length) {
-                        setMessages((list) => [...list, ...fresh]);
-                        sinceRef.current = Math.max(
-                            sinceRef.current,
-                            ...fresh.map((m) => m.ts),
-                        );
+                const serverStore = body.store === true;
+                const prevStore = storeRef.current;
+
+                // Someone turned storage OFF -> wipe both views.
+                if (initRef.current && prevStore && !serverStore) {
+                    seenRef.current.clear();
+                    sinceRef.current = Date.now();
+                    setMessages([]);
+                }
+                // Someone turned storage ON -> reload full history next poll.
+                if (initRef.current && !prevStore && serverStore) {
+                    seenRef.current.clear();
+                    sinceRef.current = 0;
+                }
+                storeRef.current = serverStore;
+                setStore(serverStore);
+
+                const incoming = body.messages || [];
+                const additions = [];
+                for (const m of incoming) {
+                    if (seenRef.current.has(m.id)) continue;
+                    seenRef.current.add(m.id);
+                    sinceRef.current = Math.max(sinceRef.current, m.ts);
+                    // When storage is off, only show messages from this page load on.
+                    if (serverStore || m.ts >= mountTimeRef.current) {
+                        additions.push(m);
                     }
                 }
+                if (additions.length) {
+                    setMessages((list) => [...list, ...additions]);
+                }
+
+                initRef.current = true;
             } catch {
                 /* ignore transient network errors */
             }
@@ -75,6 +98,25 @@ export default function ChatRoomPage() {
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
+
+    const toggleStore = async () => {
+        const next = !store;
+        setStore(next); // optimistic; poll will confirm/sync
+        storeRef.current = next;
+        if (!next) {
+            setMessages([]);
+            seenRef.current.clear();
+            sinceRef.current = Date.now();
+        } else {
+            seenRef.current.clear();
+            sinceRef.current = 0;
+        }
+        await fetch(`/api/talk/chat/${id}/store`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ store: next }),
+        });
+    };
 
     const send = async (e) => {
         e.preventDefault();
@@ -114,13 +156,45 @@ export default function ChatRoomPage() {
     return (
         <main className="flex min-h-screen flex-col bg-gray-100">
             {/* Header = connected user's name */}
-            <header className="flex items-center gap-3 border-b border-gray-200 bg-white px-4 py-3">
-                <Link href="/quicktalk/chat" className="text-gray-400 hover:text-gray-600">
-                    ←
-                </Link>
-                <h1 className="text-lg font-bold text-gray-900">
-                    {peer?.username || '…'}
-                </h1>
+            <header className="flex items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 py-3">
+                <div className="flex items-center gap-3">
+                    <Link
+                        href="/quicktalk/chat"
+                        className="text-gray-400 hover:text-gray-600"
+                    >
+                        ←
+                    </Link>
+                    <h1 className="text-lg font-bold text-gray-900">
+                        {peer?.username || '…'}
+                    </h1>
+                </div>
+
+                {/* store-chat toggle — shared, visible to both users */}
+                <button
+                    type="button"
+                    onClick={toggleStore}
+                    role="switch"
+                    aria-checked={store}
+                    className="flex items-center gap-2"
+                    title="When on, chat history is kept for both users across refreshes"
+                >
+                    <span
+                        className={
+                            'relative inline-flex h-6 w-11 items-center rounded-full transition ' +
+                            (store ? 'bg-emerald-600' : 'bg-gray-300')
+                        }
+                    >
+                        <span
+                            className={
+                                'inline-block h-5 w-5 transform rounded-full bg-white shadow transition ' +
+                                (store ? 'translate-x-5' : 'translate-x-1')
+                            }
+                        />
+                    </span>
+                    <span className="text-xs font-medium text-gray-700">
+                        {store ? 'Store chat' : 'Clear on refresh'}
+                    </span>
+                </button>
             </header>
 
             {/* Messages */}

@@ -27,7 +27,7 @@ export async function POST(request) {
     const exists = await User.findOne({ username: name });
     if (exists) {
         return Response.json(
-            { errors: { username: 'That username is already taken.' } },
+            { errors: { username: 'User already exists.' } },
             { status: 422 },
         );
     }
@@ -48,7 +48,7 @@ export async function POST(request) {
             if (err?.code === 11000 && err?.keyPattern?.connectingCode) continue;
             if (err?.code === 11000 && err?.keyPattern?.username) {
                 return Response.json(
-                    { errors: { username: 'That username is already taken.' } },
+                    { errors: { username: 'User already exists.' } },
                     { status: 422 },
                 );
             }

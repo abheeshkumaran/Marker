@@ -9,13 +9,12 @@ export default function QuickTalkChatPage() {
     const [user, setUser] = useState(null);
     const [checking, setChecking] = useState(true);
     const [showSettings, setShowSettings] = useState(false);
-    const [storeChat, setStoreChat] = useState(false); // false = clear after chat
     const [copied, setCopied] = useState(false);
 
     // "find the chat" — look up another user by connecting code
     const [code, setCode] = useState('');
     const [finding, setFinding] = useState(false);
-    const [found, setFound] = useState(null); // null | { username, isSelf } | 'notfound'
+    const [found, setFound] = useState(null); // null | { username, isSelf, requestStatus } | 'notfound'
     const [sending, setSending] = useState(false);
     const [sendMsg, setSendMsg] = useState(null); // { ok: boolean, text: string }
 
@@ -37,6 +36,15 @@ export default function QuickTalkChatPage() {
         if (res.ok) setConnections((await res.json()).connections || []);
     }, []);
 
+    const runLookup = useCallback(async (q) => {
+        try {
+            const res = await fetch(`/api/talk/lookup?code=${encodeURIComponent(q)}`);
+            setFound(res.ok ? (await res.json()).user : 'notfound');
+        } catch {
+            setFound('notfound');
+        }
+    }, []);
+
     // Identify this browser's user; bounce to login if there's no session.
     useEffect(() => {
         (async () => {
@@ -48,12 +56,6 @@ export default function QuickTalkChatPage() {
             const body = await res.json();
             setUser(body.user);
             setChecking(false);
-
-            try {
-                const saved = localStorage.getItem(`qt_store_${body.user.id}`);
-                if (saved !== null) setStoreChat(saved === '1');
-            } catch {}
-
             loadRequests();
             loadConnections();
         })();
@@ -81,18 +83,12 @@ export default function QuickTalkChatPage() {
 
         setFinding(true);
         const t = setTimeout(async () => {
-            try {
-                const res = await fetch(`/api/talk/lookup?code=${encodeURIComponent(q)}`);
-                setFound(res.ok ? (await res.json()).user : 'notfound');
-            } catch {
-                setFound('notfound');
-            } finally {
-                setFinding(false);
-            }
+            await runLookup(q);
+            setFinding(false);
         }, 400);
 
         return () => clearTimeout(t);
-    }, [code]);
+    }, [code, runLookup]);
 
     const sendRequest = async () => {
         setSending(true);
@@ -106,10 +102,11 @@ export default function QuickTalkChatPage() {
             const body = await res.json().catch(() => ({}));
             if (res.ok) {
                 setSendMsg({ ok: true, text: `Request sent to ${found.username}.` });
-                loadRequests();
             } else {
                 setSendMsg({ ok: false, text: body.error || 'Could not send request.' });
             }
+            await runLookup(code.trim()); // refresh the button state
+            loadRequests();
         } finally {
             setSending(false);
         }
@@ -125,19 +122,10 @@ export default function QuickTalkChatPage() {
             });
             await loadRequests();
             if (action === 'accept') await loadConnections();
+            if (code.trim().length >= 3) runLookup(code.trim());
         } finally {
             setActingId(null);
         }
-    };
-
-    const toggleStore = () => {
-        setStoreChat((v) => {
-            const next = !v;
-            try {
-                localStorage.setItem(`qt_store_${user.id}`, next ? '1' : '0');
-            } catch {}
-            return next;
-        });
     };
 
     const copyCode = async () => {
@@ -164,6 +152,67 @@ export default function QuickTalkChatPage() {
 
     const pending = requests.pendingCount || 0;
 
+    // Button for the found user, based on the current request status.
+    function renderFindAction() {
+        if (!found || found === 'notfound') return null;
+        const status = found.requestStatus;
+
+        if (found.isSelf) {
+            return (
+                <button
+                    type="button"
+                    disabled
+                    className="rounded-md bg-gray-300 px-4 py-2 text-sm font-semibold text-white"
+                >
+                    Send request
+                </button>
+            );
+        }
+        if (status === 'connected') {
+            return (
+                <span className="rounded-md bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-700">
+                    Connected
+                </span>
+            );
+        }
+        if (status === 'sent') {
+            return (
+                <button
+                    type="button"
+                    disabled
+                    className="rounded-md bg-gray-300 px-4 py-2 text-sm font-semibold text-white"
+                >
+                    Request sented
+                </button>
+            );
+        }
+        if (status === 'received') {
+            return (
+                <button
+                    type="button"
+                    onClick={() => {
+                        setShowRequests(true);
+                        loadRequests();
+                    }}
+                    className="rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
+                >
+                    Respond in Requests
+                </button>
+            );
+        }
+        // null or 'rejected' -> allow (re)sending
+        return (
+            <button
+                type="button"
+                onClick={sendRequest}
+                disabled={sending}
+                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+                {sending ? 'Sending…' : 'Send request'}
+            </button>
+        );
+    }
+
     return (
         <main className="min-h-screen bg-gray-100 p-6">
             <div className="mx-auto max-w-2xl">
@@ -176,38 +225,6 @@ export default function QuickTalkChatPage() {
                             Signed in as <strong>{user.username}</strong>. Everything
                             below is private to your account.
                         </p>
-
-                        <div className="mt-4 rounded-lg bg-white p-4 shadow-sm">
-                            <p className="text-sm text-gray-700">
-                                This chat will clear after the chat concludes — do you
-                                want to store or clear it?
-                            </p>
-
-                            <button
-                                type="button"
-                                onClick={toggleStore}
-                                role="switch"
-                                aria-checked={storeChat}
-                                className="mt-3 flex items-center gap-3"
-                            >
-                                <span
-                                    className={
-                                        'relative inline-flex h-6 w-11 items-center rounded-full transition ' +
-                                        (storeChat ? 'bg-emerald-600' : 'bg-gray-300')
-                                    }
-                                >
-                                    <span
-                                        className={
-                                            'inline-block h-5 w-5 transform rounded-full bg-white shadow transition ' +
-                                            (storeChat ? 'translate-x-5' : 'translate-x-1')
-                                        }
-                                    />
-                                </span>
-                                <span className="text-sm font-medium text-gray-800">
-                                    {storeChat ? 'Allow (store chat)' : 'Not allow (clear chat)'}
-                                </span>
-                            </button>
-                        </div>
                     </div>
 
                     {/* Right side */}
@@ -320,14 +337,7 @@ export default function QuickTalkChatPage() {
                                     <span className="text-gray-400"> (you)</span>
                                 )}
                             </span>
-                            <button
-                                type="button"
-                                onClick={sendRequest}
-                                disabled={sending || found.isSelf}
-                                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
-                            >
-                                {sending ? 'Sending…' : 'Send request'}
-                            </button>
+                            {renderFindAction()}
                         </div>
                     )}
 
