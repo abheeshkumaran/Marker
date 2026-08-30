@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function QuickTalkChatPage() {
@@ -15,7 +15,18 @@ export default function QuickTalkChatPage() {
     const [code, setCode] = useState('');
     const [finding, setFinding] = useState(false);
     const [found, setFound] = useState(null); // null | { username, isSelf } | 'notfound'
-    const [connectedTo, setConnectedTo] = useState(null);
+    const [sending, setSending] = useState(false);
+    const [sendMsg, setSendMsg] = useState(null); // { ok: boolean, text: string }
+
+    // connection requests
+    const [requests, setRequests] = useState({ pendingCount: 0, incoming: [], sent: [] });
+    const [showRequests, setShowRequests] = useState(false);
+    const [actingId, setActingId] = useState(null);
+
+    const loadRequests = useCallback(async () => {
+        const res = await fetch('/api/talk/requests');
+        if (res.ok) setRequests(await res.json());
+    }, []);
 
     // Identify this browser's user; bounce to login if there's no session.
     useEffect(() => {
@@ -33,13 +44,22 @@ export default function QuickTalkChatPage() {
                 const saved = localStorage.getItem(`qt_store_${body.user.id}`);
                 if (saved !== null) setStoreChat(saved === '1');
             } catch {}
+
+            loadRequests();
         })();
-    }, [router]);
+    }, [router, loadRequests]);
+
+    // Poll for new incoming requests so the indicator stays fresh.
+    useEffect(() => {
+        if (checking) return;
+        const t = setInterval(loadRequests, 15000);
+        return () => clearInterval(t);
+    }, [checking, loadRequests]);
 
     // Debounced lookup as the user types a connecting code.
     useEffect(() => {
         const q = code.trim();
-        setConnectedTo(null);
+        setSendMsg(null);
         if (q.length < 3) {
             setFound(null);
             setFinding(false);
@@ -49,15 +69,8 @@ export default function QuickTalkChatPage() {
         setFinding(true);
         const t = setTimeout(async () => {
             try {
-                const res = await fetch(
-                    `/api/talk/lookup?code=${encodeURIComponent(q)}`,
-                );
-                if (res.ok) {
-                    const body = await res.json();
-                    setFound(body.user);
-                } else {
-                    setFound('notfound');
-                }
+                const res = await fetch(`/api/talk/lookup?code=${encodeURIComponent(q)}`);
+                setFound(res.ok ? (await res.json()).user : 'notfound');
             } catch {
                 setFound('notfound');
             } finally {
@@ -68,9 +81,38 @@ export default function QuickTalkChatPage() {
         return () => clearTimeout(t);
     }, [code]);
 
-    const connect = () => {
-        if (found && found !== 'notfound') {
-            setConnectedTo(found.username);
+    const sendRequest = async () => {
+        setSending(true);
+        setSendMsg(null);
+        try {
+            const res = await fetch('/api/talk/requests', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: code.trim() }),
+            });
+            const body = await res.json().catch(() => ({}));
+            if (res.ok) {
+                setSendMsg({ ok: true, text: `Request sent to ${found.username}.` });
+                loadRequests();
+            } else {
+                setSendMsg({ ok: false, text: body.error || 'Could not send request.' });
+            }
+        } finally {
+            setSending(false);
+        }
+    };
+
+    const act = async (id, action) => {
+        setActingId(id);
+        try {
+            await fetch(`/api/talk/requests/${id}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action }),
+            });
+            await loadRequests();
+        } finally {
+            setActingId(null);
         }
     };
 
@@ -105,6 +147,8 @@ export default function QuickTalkChatPage() {
             </main>
         );
     }
+
+    const pending = requests.pendingCount || 0;
 
     return (
         <main className="min-h-screen bg-gray-100 p-6">
@@ -157,7 +201,7 @@ export default function QuickTalkChatPage() {
                         <button
                             type="button"
                             onClick={() => setShowSettings((v) => !v)}
-                            className="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                            className="relative inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                         >
                             <svg
                                 viewBox="0 0 24 24"
@@ -173,6 +217,9 @@ export default function QuickTalkChatPage() {
                                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.2.61.79 1.03 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                             </svg>
                             Settings
+                            {pending > 0 && (
+                                <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500" />
+                            )}
                         </button>
 
                         {showSettings && (
@@ -200,8 +247,24 @@ export default function QuickTalkChatPage() {
 
                                 <button
                                     type="button"
+                                    onClick={() => {
+                                        setShowRequests(true);
+                                        loadRequests();
+                                    }}
+                                    className="mt-3 flex w-full items-center justify-between rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                                >
+                                    <span>Requests</span>
+                                    {pending > 0 && (
+                                        <span className="ml-2 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-semibold text-white">
+                                            {pending}
+                                        </span>
+                                    )}
+                                </button>
+
+                                <button
+                                    type="button"
                                     onClick={logout}
-                                    className="mt-4 w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                                    className="mt-2 w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
                                 >
                                     Log out
                                 </button>
@@ -227,9 +290,7 @@ export default function QuickTalkChatPage() {
                         className="mt-2 block w-full rounded-md border-gray-300 font-mono shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                     />
 
-                    {finding && (
-                        <p className="mt-2 text-sm text-gray-500">Searching…</p>
-                    )}
+                    {finding && <p className="mt-2 text-sm text-gray-500">Searching…</p>}
 
                     {!finding && found === 'notfound' && (
                         <p className="mt-2 text-sm text-red-600">
@@ -240,29 +301,138 @@ export default function QuickTalkChatPage() {
                     {!finding && found && found !== 'notfound' && (
                         <div className="mt-3 flex items-center justify-between rounded-md border border-gray-200 p-3">
                             <span className="text-sm text-gray-800">
-                                User:{' '}
-                                <strong>{found.username}</strong>
+                                User: <strong>{found.username}</strong>
                                 {found.isSelf && (
                                     <span className="text-gray-400"> (you)</span>
                                 )}
                             </span>
                             <button
                                 type="button"
-                                onClick={connect}
-                                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+                                onClick={sendRequest}
+                                disabled={sending || found.isSelf}
+                                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
                             >
-                                Connect
+                                {sending ? 'Sending…' : 'Send request'}
                             </button>
                         </div>
                     )}
 
-                    {connectedTo && (
-                        <p className="mt-2 text-sm font-medium text-emerald-700">
-                            Connected with {connectedTo}.
+                    {sendMsg && (
+                        <p
+                            className={
+                                'mt-2 text-sm font-medium ' +
+                                (sendMsg.ok ? 'text-emerald-700' : 'text-red-600')
+                            }
+                        >
+                            {sendMsg.text}
                         </p>
                     )}
                 </div>
             </div>
+
+            {/* Requests popup */}
+            {showRequests && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+                    onClick={() => setShowRequests(false)}
+                >
+                    <div
+                        className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="mb-3 flex items-center justify-between">
+                            <h2 className="text-lg font-bold text-gray-900">Requests</h2>
+                            <button
+                                type="button"
+                                onClick={() => setShowRequests(false)}
+                                className="text-gray-400 hover:text-gray-600"
+                                aria-label="Close"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {requests.incoming.length === 0 && requests.sent.length === 0 ? (
+                            <p className="py-6 text-center text-sm text-gray-500">
+                                No requests.
+                            </p>
+                        ) : (
+                            <div className="space-y-4">
+                                {requests.incoming.length > 0 && (
+                                    <div>
+                                        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                            Incoming
+                                        </h3>
+                                        <ul className="space-y-2">
+                                            {requests.incoming.map((r) => (
+                                                <li
+                                                    key={r.id}
+                                                    className="flex items-center justify-between rounded-md border border-gray-200 p-3"
+                                                >
+                                                    <span className="text-sm text-gray-800">
+                                                        <strong>{r.username}</strong> wants
+                                                        to connect
+                                                    </span>
+                                                    <span className="flex gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => act(r.id, 'accept')}
+                                                            disabled={actingId === r.id}
+                                                            className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                                                        >
+                                                            Accept
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => act(r.id, 'reject')}
+                                                            disabled={actingId === r.id}
+                                                            className="rounded-md bg-rose-600 px-3 py-1 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+                                                        >
+                                                            Reject
+                                                        </button>
+                                                    </span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+
+                                {requests.sent.length > 0 && (
+                                    <div>
+                                        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                                            Sent
+                                        </h3>
+                                        <ul className="space-y-2">
+                                            {requests.sent.map((r) => (
+                                                <li
+                                                    key={r.id}
+                                                    className="flex items-center justify-between rounded-md border border-gray-200 p-3 text-sm"
+                                                >
+                                                    <span className="text-gray-800">
+                                                        To <strong>{r.username}</strong>
+                                                    </span>
+                                                    <span
+                                                        className={
+                                                            'rounded-full px-2 py-0.5 text-xs font-semibold ' +
+                                                            (r.status === 'accepted'
+                                                                ? 'bg-emerald-100 text-emerald-700'
+                                                                : r.status === 'rejected'
+                                                                  ? 'bg-rose-100 text-rose-700'
+                                                                  : 'bg-gray-100 text-gray-600')
+                                                        }
+                                                    >
+                                                        {r.status}
+                                                    </span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </main>
     );
 }
