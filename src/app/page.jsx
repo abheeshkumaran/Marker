@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import PaymentsReminder from './PaymentsReminder';
 
 function IncomeIcon(props) {
     return (
@@ -84,6 +85,8 @@ export default function Home() {
                     </button>
                 );
             })}
+
+            <PaymentsReminder />
         </main>
     );
 }
