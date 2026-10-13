@@ -39,7 +39,7 @@ export default function QuickTalkLoginPage() {
         setBusy(false);
 
         if (res.ok) {
-            router.push('/quicktalk/chat');
+            router.push(body.role === 'superadmin' ? '/super-admin' : '/quicktalk/chat');
             router.refresh();
             return;
         }

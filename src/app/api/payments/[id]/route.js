@@ -4,11 +4,16 @@ export const dynamic = 'force-dynamic';
 import mongoose from 'mongoose';
 import dbConnect from '@/lib/mongoose';
 import Payment from '@/models/Payment';
+import { getAuthenticatedUser, forbiddenResponse, unauthorizedResponse } from '@/lib/authorization';
 
 // PATCH /api/payments/:id  { status: 'pending' | 'paid' }
 // Flipping pending -> paid bumps paidCount (capped at noOfPendings);
 // paid -> pending decrements it (floored at 0).
 export async function PATCH(request, { params }) {
+    const user = await getAuthenticatedUser(request);
+    if (!user) return unauthorizedResponse();
+    if (user.role === 'superadmin') return forbiddenResponse();
+
     const { id } = await params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
         return Response.json({ error: 'Invalid id.' }, { status: 400 });
@@ -23,7 +28,7 @@ export async function PATCH(request, { params }) {
     }
 
     await dbConnect();
-    const payment = await Payment.findById(id);
+    const payment = await Payment.findOne({ _id: id, userId: user._id });
     if (!payment) {
         return Response.json({ error: 'Payment not found.' }, { status: 404 });
     }

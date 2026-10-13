@@ -6,11 +6,17 @@ import dbConnect from '@/lib/mongoose';
 import User from '@/models/User';
 import { setSessionCookie } from '@/lib/session';
 import { generateUniqueConnectingCode } from '@/lib/connectingCode';
+import { getSuperAdminCredentials, ensureSuperAdmin } from '@/lib/superAdmin';
+import { getAuthenticatedUser } from '@/lib/authorization';
 
 export async function POST(request) {
+    if (await getAuthenticatedUser(request)) {
+        return Response.json({ error: 'Sign out before creating another account.' }, { status: 409 });
+    }
+
     const { username, password } = await request.json().catch(() => ({}));
 
-    const name = String(username || '').trim();
+    const name = String(username || '').trim().toLowerCase();
     const pass = String(password || '');
 
     const errors = {};
@@ -22,8 +28,22 @@ export async function POST(request) {
         return Response.json({ errors }, { status: 422 });
     }
 
-    await dbConnect();
+    const superAdminCredentials = getSuperAdminCredentials();
+    if (!superAdminCredentials) {
+        return Response.json(
+            { error: 'Super-admin credentials are not configured on the server.' },
+            { status: 503 },
+        );
+    }
+    if (name === superAdminCredentials.username) {
+        return Response.json(
+            { errors: { username: 'That username is reserved.' } },
+            { status: 422 },
+        );
+    }
 
+    await ensureSuperAdmin();
+    await dbConnect();
     const exists = await User.findOne({ username: name });
     if (exists) {
         return Response.json(
@@ -40,6 +60,7 @@ export async function POST(request) {
             user = await User.create({
                 username: name,
                 password: passwordHash,
+                role: 'user',
                 connectingCode: await generateUniqueConnectingCode(User),
             });
             break;
@@ -63,10 +84,19 @@ export async function POST(request) {
         );
     }
 
-    await setSessionCookie({ uid: user._id.toString(), username: user.username });
+    await setSessionCookie({
+        uid: user._id.toString(),
+        username: user.username,
+        role: 'user',
+    });
 
     return Response.json(
-        { ok: true, username: user.username, connectingCode: user.connectingCode },
+        {
+            ok: true,
+            username: user.username,
+            role: 'user',
+            connectingCode: user.connectingCode,
+        },
         { status: 201 },
     );
 }

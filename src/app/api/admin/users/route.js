@@ -4,9 +4,14 @@ export const dynamic = 'force-dynamic';
 import dbConnect from '@/lib/mongoose';
 import User from '@/models/User';
 import { generateUniqueConnectingCode } from '@/lib/connectingCode';
+import { getSuperAdmin } from '@/lib/authorization';
 
 // GET /api/admin/users — list users for the admin panel.
 export async function GET() {
+    if (!(await getSuperAdmin())) {
+        return Response.json({ error: 'Super-admin access is required.' }, { status: 403 });
+    }
+
     await dbConnect();
 
     // Backfill any user created before connecting codes existed.

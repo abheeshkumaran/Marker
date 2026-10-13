@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import dbConnect from '@/lib/mongoose';
 import Payment from '@/models/Payment';
+import { getAuthenticatedUser, forbiddenResponse, unauthorizedResponse } from '@/lib/authorization';
 
 function serialize(p) {
     return {
@@ -17,14 +18,22 @@ function serialize(p) {
 }
 
 // GET /api/payments — list all payments (newest first).
-export async function GET() {
+export async function GET(request) {
+    const user = await getAuthenticatedUser(request);
+    if (!user) return unauthorizedResponse();
+    if (user.role === 'superadmin') return forbiddenResponse();
+
     await dbConnect();
-    const rows = await Payment.find({}).sort({ createdAt: -1 }).lean();
+    const rows = await Payment.find({ userId: user._id }).sort({ createdAt: -1 }).lean();
     return Response.json({ payments: rows.map(serialize) });
 }
 
 // POST /api/payments — create a payment reminder.
 export async function POST(request) {
+    const user = await getAuthenticatedUser(request);
+    if (!user) return unauthorizedResponse();
+    if (user.role === 'superadmin') return forbiddenResponse();
+
     const data = await request.json().catch(() => ({}));
 
     const date = data.date ? new Date(data.date) : null;
@@ -45,6 +54,7 @@ export async function POST(request) {
 
     await dbConnect();
     const created = await Payment.create({
+        userId: user._id,
         date,
         duePayment,
         transferTo,

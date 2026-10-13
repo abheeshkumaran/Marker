@@ -8,6 +8,12 @@ const UserSchema = new mongoose.Schema(
             unique: true,
             trim: true,
         },
+        role: {
+            type: String,
+            enum: ['user', 'superadmin'],
+            default: 'user',
+            required: true,
+        },
         // bcrypt hash — never selected by default
         password: {
             type: String,

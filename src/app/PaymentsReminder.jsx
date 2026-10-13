@@ -67,7 +67,7 @@ export default function PaymentsReminder() {
             <button
                 type="button"
                 onClick={() => setOpen(true)}
-                className="flex w-64 items-center gap-3 rounded-lg bg-amber-600 px-5 py-3 text-base font-semibold text-white shadow transition hover:bg-amber-700"
+                className="flex min-h-24 w-full items-center gap-3 rounded-lg bg-amber-600 px-5 py-3 text-base font-semibold text-white shadow transition hover:bg-amber-700"
             >
                 <BellIcon className="h-5 w-5 shrink-0" />
                 <span>Payments reminder</span>

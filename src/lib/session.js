@@ -1,19 +1,23 @@
 import crypto from 'crypto';
 import { cookies } from 'next/headers';
+import dbConnect from '@/lib/mongoose';
+import User from '@/models/User';
 
 const COOKIE = 'qt_session';
 const MAX_AGE = 60 * 60 * 24 * 7; // 7 days
-const SECRET =
-    process.env.SESSION_SECRET ||
-    process.env.NEXTAUTH_SECRET ||
-    'dev-insecure-secret-change-me';
+
+function getSecret() {
+    const secret = process.env.SESSION_SECRET || process.env.NEXTAUTH_SECRET;
+    if (!secret) throw new Error('SESSION_SECRET must be configured to sign user sessions.');
+    return secret;
+}
 
 function b64url(buf) {
     return Buffer.from(buf).toString('base64url');
 }
 
 function sign(data) {
-    return crypto.createHmac('sha256', SECRET).update(data).digest('base64url');
+    return crypto.createHmac('sha256', getSecret()).update(data).digest('base64url');
 }
 
 /** Create a signed token for a payload object. */
@@ -46,7 +50,14 @@ export function verifySession(token) {
 /** Read the current session payload from the request cookie, or null. */
 export async function getSession() {
     const store = await cookies();
-    return verifySession(store.get(COOKIE)?.value);
+    const session = verifySession(store.get(COOKIE)?.value);
+    if (!session || session.role === 'superadmin') return null;
+    if (!session.role && session.uid) {
+        await dbConnect();
+        const user = await User.findById(session.uid).select('role').lean();
+        if (user?.role === 'superadmin') return null;
+    }
+    return session;
 }
 
 /** Set the session cookie (call inside a route handler / server action). */

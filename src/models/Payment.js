@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const PaymentSchema = new mongoose.Schema(
     {
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
         date: { type: Date, required: true },
         duePayment: { type: Number, required: true, min: 0 },
         transferTo: { type: String, required: true, trim: true },
