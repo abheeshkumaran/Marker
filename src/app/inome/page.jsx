@@ -1,35 +1,56 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+function todayString() {
+    const today = new Date();
+    return new Date(today.getTime() - today.getTimezoneOffset() * 60_000)
+        .toISOString()
+        .slice(0, 10);
+}
+
 export default function IncomePage() {
-    const router = useRouter();
     const [incomeDate, setIncomeDate] = useState('');
-    const [source, setSource] = useState('');
+    const [sources, setSources] = useState([]);
+    const [sourceId, setSourceId] = useState('');
+    const [otherSource, setOtherSource] = useState('');
     const [amount, setAmount] = useState('');
+    const [isLoadingSources, setIsLoadingSources] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
+    const [successMessage, setSuccessMessage] = useState('');
 
     useEffect(() => {
-        const today = new Date();
-        const localDate = new Date(today.getTime() - today.getTimezoneOffset() * 60_000)
-            .toISOString()
-            .slice(0, 10);
-        setIncomeDate(localDate);
+        setIncomeDate(todayString());
+
+        async function loadSources() {
+            try {
+                const response = await fetch('/api/income-sources', { cache: 'no-store' });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Unable to load sources.');
+                setSources(result.items);
+            } catch (error) {
+                setErrorMessage(error.message || 'Unable to load sources.');
+            } finally {
+                setIsLoadingSources(false);
+            }
+        }
+
+        loadSources();
     }, []);
 
     async function handleSubmit(event) {
         event.preventDefault();
         setIsSubmitting(true);
         setErrorMessage('');
+        setSuccessMessage('');
 
         try {
             const response = await fetch('/api/income', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ date: incomeDate, source, amount }),
+                body: JSON.stringify({ date: incomeDate, sourceId, otherSource, amount }),
             });
             const result = await response.json();
 
@@ -40,7 +61,10 @@ export default function IncomePage() {
                 throw new Error(validationMessage || 'Unable to save income.');
             }
 
-            router.push('/');
+            setSuccessMessage(`Added ${result.income.amount} from ${result.income.source}.`);
+            setSourceId('');
+            setOtherSource('');
+            setAmount('');
         } catch (error) {
             setErrorMessage(error.message || 'Unable to save income.');
         } finally {
@@ -50,25 +74,13 @@ export default function IncomePage() {
 
     return (
         <main className="flex min-h-screen items-center justify-center bg-gray-100 p-6">
-            <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
             <section
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="income-dialog-title"
-                className="relative z-10 w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+                aria-labelledby="income-title"
+                className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
             >
-                <div className="mb-5 flex items-center justify-between">
-                    <h1 id="income-dialog-title" className="text-xl font-bold text-gray-900">
-                        Add Income
-                    </h1>
-                    <Link
-                        href="/"
-                        aria-label="Close income form"
-                        className="rounded-md px-3 py-1 text-2xl leading-none text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-                    >
-                        &times;
-                    </Link>
-                </div>
+                <h1 id="income-title" className="mb-5 text-xl font-bold text-gray-900">
+                    Add Income
+                </h1>
                 <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                     <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
                         Income Date
@@ -81,22 +93,47 @@ export default function IncomePage() {
                         />
                     </label>
                     <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
-                        Select Source
+                        Source
                         <select
-                            value={source}
-                            onChange={(event) => setSource(event.target.value)}
+                            value={sourceId}
+                            onChange={(event) => setSourceId(event.target.value)}
                             required
                             className="rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900"
                         >
                             <option value="" disabled>
-                                Choose a source
+                                {isLoadingSources ? 'Loading sources...' : 'Choose a source'}
                             </option>
-                            <option value="salary">Salary</option>
-                            <option value="business">Business</option>
-                            <option value="investment">Investment</option>
+                            {sources.map((source) => (
+                                <option key={source.id} value={source.id}>
+                                    {source.name}
+                                </option>
+                            ))}
                             <option value="other">Other</option>
                         </select>
+                        {!isLoadingSources && sources.length === 0 && (
+                            <span className="text-xs font-normal text-gray-500">
+                                No saved sources yet.{' '}
+                                <Link href="/sources" className="text-indigo-600 underline">
+                                    Add sources
+                                </Link>{' '}
+                                or choose Other.
+                            </span>
+                        )}
                     </label>
+                    {sourceId === 'other' && (
+                        <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
+                            Your Income Source
+                            <input
+                                type="text"
+                                value={otherSource}
+                                onChange={(event) => setOtherSource(event.target.value)}
+                                required
+                                maxLength={60}
+                                placeholder="Where did this income come from?"
+                                className="rounded-md border border-gray-300 px-3 py-2 text-gray-900"
+                            />
+                        </label>
+                    )}
                     <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
                         Add Your Income
                         <input
@@ -115,12 +152,17 @@ export default function IncomePage() {
                             {errorMessage}
                         </p>
                     )}
+                    {successMessage && (
+                        <p role="status" className="text-sm text-emerald-700">
+                            {successMessage}
+                        </p>
+                    )}
                     <button
                         type="submit"
                         disabled={isSubmitting}
-                        className="rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white shadow transition hover:bg-emerald-700"
+                        className="rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white shadow transition hover:bg-emerald-700 disabled:opacity-60"
                     >
-                        {isSubmitting ? 'Saving...' : 'Add Your Income'}
+                        {isSubmitting ? 'Saving...' : 'Add'}
                     </button>
                 </form>
             </section>

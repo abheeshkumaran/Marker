@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff } from '@/components/EyeIcons';
 
@@ -12,7 +11,6 @@ export default function QuickTalkLoginPage() {
     const [showPassword, setShowPassword] = useState(false);
     const [errors, setErrors] = useState({});
     const [notice, setNotice] = useState(null);
-    const [noAccount, setNoAccount] = useState(false);
     const [busy, setBusy] = useState(false);
 
     const submit = async (e) => {
@@ -20,7 +18,6 @@ export default function QuickTalkLoginPage() {
         setBusy(true);
         setErrors({});
         setNotice(null);
-        setNoAccount(false);
 
         let res;
         let body = {};
@@ -45,7 +42,6 @@ export default function QuickTalkLoginPage() {
         }
 
         if (res.status === 404 && body.code === 'no-account') {
-            setNoAccount(true);
             setNotice(body.message);
             return;
         }
@@ -136,27 +132,6 @@ export default function QuickTalkLoginPage() {
                         {busy ? 'Checking…' : 'Log in'}
                     </button>
                 </form>
-
-                <div className="mt-4 text-center text-sm text-gray-600">
-                    {noAccount ? (
-                        <Link
-                            href="/quicktalk/register"
-                            className="inline-block rounded-md bg-gray-800 px-4 py-2 font-semibold text-white hover:bg-gray-700"
-                        >
-                            Create an account
-                        </Link>
-                    ) : (
-                        <>
-                            Don&apos;t have a password?{' '}
-                            <Link
-                                href="/quicktalk/register"
-                                className="font-medium text-indigo-600 underline"
-                            >
-                                Register
-                            </Link>
-                        </>
-                    )}
-                </div>
             </div>
         </main>
     );

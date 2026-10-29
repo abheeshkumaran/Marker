@@ -3,9 +3,9 @@ export const dynamic = 'force-dynamic';
 
 import dbConnect from '@/lib/mongoose';
 import Income from '@/models/Income';
+import IncomeSource from '@/models/IncomeSource';
 import { getAuthenticatedUser, forbiddenResponse, unauthorizedResponse } from '@/lib/authorization';
-
-const validSources = new Set(['salary', 'business', 'investment', 'other']);
+import { resolveOption } from '@/lib/namedOptions';
 
 export async function POST(request) {
     const user = await getAuthenticatedUser(request);
@@ -27,14 +27,22 @@ export async function POST(request) {
     const date = /^\d{4}-\d{2}-\d{2}$/.test(dateString)
         ? new Date(`${dateString}T00:00:00.000Z`)
         : null;
-    const source = typeof data.source === 'string' ? data.source.trim() : '';
     const amount = Number(data.amount);
+
+    await dbConnect();
+    const source = await resolveOption(
+        IncomeSource,
+        user._id,
+        data.sourceId,
+        data.otherSource,
+        'income source',
+    );
 
     const errors = {};
     if (!date || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== dateString) {
         errors.date = 'A valid income date is required.';
     }
-    if (!validSources.has(source)) errors.source = 'Select a valid income source.';
+    if (source.error) errors.source = source.error;
     if (
         (typeof data.amount !== 'string' && typeof data.amount !== 'number') ||
         data.amount === '' ||
@@ -49,14 +57,21 @@ export async function POST(request) {
     }
 
     try {
-        await dbConnect();
-        const created = await Income.create({ userId: user._id, date, source, amount });
+        const created = await Income.create({
+            userId: user._id,
+            date,
+            source: source.name,
+            sourceId: source.refId,
+            isOther: source.isOther,
+            amount,
+        });
         return Response.json(
             {
                 income: {
                     id: String(created._id),
                     date: created.date,
                     source: created.source,
+                    isOther: created.isOther,
                     amount: created.amount,
                 },
             },

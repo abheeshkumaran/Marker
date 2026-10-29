@@ -58,7 +58,7 @@ export async function POST(request) {
     // No such user -> tell the client to offer registration.
     if (!user) {
         return Response.json(
-            { code: 'no-account', message: 'No account for that username. Please register.' },
+            { code: 'no-account', message: 'No account for that username.' },
             { status: 404 },
         );
     }

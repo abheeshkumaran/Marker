@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Eye, EyeOff } from '@/components/EyeIcons';
@@ -90,12 +89,6 @@ export default function LoginPage() {
                         {busy ? 'Signing in...' : 'Sign in'}
                     </button>
                 </form>
-                <p className="mt-4 text-sm text-gray-600">
-                    New user?{' '}
-                    <Link href="/register" className="font-medium text-indigo-600 underline">
-                        Create an account
-                    </Link>
-                </p>
             </section>
         </main>
     );

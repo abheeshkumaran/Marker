@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import AuthBar from './AuthBar';
+import SideNav from './SideNav';
 
 const publicPaths = new Set(['/login', '/register', '/quicktalk', '/quicktalk/register']);
 
@@ -56,6 +57,21 @@ export default function AuthGate({ children }) {
             <main className="flex min-h-screen items-center justify-center bg-gray-100">
                 <p role="status" className="text-sm text-gray-600">Checking account...</p>
             </main>
+        );
+    }
+
+    const showSideNav =
+        !publicPaths.has(pathname) &&
+        pathname !== '/super-admin' &&
+        !pathname.startsWith('/admin-pablo') &&
+        !pathname.startsWith('/quicktalk');
+
+    if (showSideNav) {
+        return (
+            <>
+                <SideNav />
+                <div className="md:pl-60">{children}</div>
+            </>
         );
     }
 

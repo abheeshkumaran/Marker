@@ -3,13 +3,19 @@ import mongoose from 'mongoose';
 const PaymentSchema = new mongoose.Schema(
     {
         userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+        // due date of the next unpaid installment; moves forward a month each time one is paid
         date: { type: Date, required: true },
+        // day of the month installments fall on, so short months don't shift later due dates
+        dueDay: { type: Number, min: 1, max: 31 },
+        // amount of each installment
         duePayment: { type: Number, required: true, min: 0 },
+        // payment info: who / what the payment is for
         transferTo: { type: String, required: true, trim: true },
-        // total number of installments / pendings for this payment
+        // total number of installments for this payment
         noOfPendings: { type: Number, required: true, min: 1 },
-        // how many have been marked paid — shown as `${paidCount}/${noOfPendings}`
+        // installments paid so far; the next one is paidCount + 1 of noOfPendings
         paidCount: { type: Number, default: 0, min: 0 },
+        // 'paid' once every installment is paid
         status: {
             type: String,
             enum: ['pending', 'paid'],

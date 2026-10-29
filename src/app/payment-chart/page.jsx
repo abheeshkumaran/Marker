@@ -11,7 +11,13 @@ function formatAmount(amount) {
 }
 
 function formatDate(date) {
-    return new Date(date).toLocaleDateString();
+    return new Date(date).toLocaleDateString(undefined, { timeZone: 'UTC' });
+}
+
+// transaction dates have no time, so show when the entry was recorded
+function formatTime(createdAt) {
+    if (!createdAt) return '—';
+    return new Date(createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
 export default function PaymentChartPage() {
@@ -87,6 +93,7 @@ export default function PaymentChartPage() {
                             <thead>
                                 <tr className="border-b border-gray-200 text-gray-500">
                                     <th className="px-4 py-3 font-medium">Date</th>
+                                    <th className="px-4 py-3 font-medium">Time</th>
                                     <th className="px-4 py-3 font-medium">Type</th>
                                     <th className="px-4 py-3 font-medium">Description</th>
                                     <th className="px-4 py-3 text-right font-medium">Amount</th>
@@ -95,7 +102,7 @@ export default function PaymentChartPage() {
                             <tbody>
                                 {transactions.length === 0 && (
                                     <tr>
-                                        <td colSpan={4} className="px-4 py-6 text-gray-500">
+                                        <td colSpan={5} className="px-4 py-6 text-gray-500">
                                             No income or expense transactions yet.
                                         </td>
                                     </tr>
@@ -107,6 +114,9 @@ export default function PaymentChartPage() {
                                     >
                                         <td className="whitespace-nowrap px-4 py-3 text-gray-700">
                                             {formatDate(transaction.date)}
+                                        </td>
+                                        <td className="whitespace-nowrap px-4 py-3 text-gray-700">
+                                            {formatTime(transaction.createdAt)}
                                         </td>
                                         <td
                                             className={

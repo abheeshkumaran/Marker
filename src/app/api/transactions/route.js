@@ -26,6 +26,7 @@ export async function GET(request) {
                 description:
                     income.source === 'opening_balance' ? 'Net Balance' : income.source,
                 amount: income.amount,
+                createdAt: income.createdAt,
             })),
             ...expenses.map((expense) => ({
                 id: String(expense._id),
@@ -33,8 +34,13 @@ export async function GET(request) {
                 type: 'expense',
                 description: expense.purpose,
                 amount: expense.amount,
+                createdAt: expense.createdAt,
             })),
-        ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        ].sort(
+            (a, b) =>
+                new Date(b.date).getTime() - new Date(a.date).getTime() ||
+                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        );
 
         return Response.json({ transactions });
     } catch (error) {

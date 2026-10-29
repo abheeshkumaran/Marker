@@ -3,7 +3,9 @@ export const dynamic = 'force-dynamic';
 
 import dbConnect from '@/lib/mongoose';
 import Expense from '@/models/Expense';
+import ExpenseCategory from '@/models/ExpenseCategory';
 import { getAuthenticatedUser, forbiddenResponse, unauthorizedResponse } from '@/lib/authorization';
+import { resolveOption } from '@/lib/namedOptions';
 
 export async function POST(request) {
     const user = await getAuthenticatedUser(request);
@@ -25,14 +27,22 @@ export async function POST(request) {
     const date = /^\d{4}-\d{2}-\d{2}$/.test(dateString)
         ? new Date(`${dateString}T00:00:00.000Z`)
         : null;
-    const purpose = typeof data.purpose === 'string' ? data.purpose.trim() : '';
     const amount = Number(data.amount);
+
+    await dbConnect();
+    const category = await resolveOption(
+        ExpenseCategory,
+        user._id,
+        data.categoryId,
+        data.otherPurpose,
+        'expense',
+    );
 
     const errors = {};
     if (!date || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== dateString) {
         errors.date = 'A valid expense date is required.';
     }
-    if (!purpose) errors.purpose = 'Expense for is required.';
+    if (category.error) errors.purpose = category.error;
     if (
         (typeof data.amount !== 'string' && typeof data.amount !== 'number') ||
         data.amount === '' ||
@@ -47,14 +57,21 @@ export async function POST(request) {
     }
 
     try {
-        await dbConnect();
-        const created = await Expense.create({ userId: user._id, date, purpose, amount });
+        const created = await Expense.create({
+            userId: user._id,
+            date,
+            purpose: category.name,
+            categoryId: category.refId,
+            isOther: category.isOther,
+            amount,
+        });
         return Response.json(
             {
                 expense: {
                     id: String(created._id),
                     date: created.date,
                     purpose: created.purpose,
+                    isOther: created.isOther,
                     amount: created.amount,
                 },
             },

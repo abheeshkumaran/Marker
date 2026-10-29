@@ -1,35 +1,89 @@
 'use client';
 
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+function todayString() {
+    const today = new Date();
+    return new Date(today.getTime() - today.getTimezoneOffset() * 60_000)
+        .toISOString()
+        .slice(0, 10);
+}
+
 export default function ExpensePage() {
-    const router = useRouter();
     const [expenseDate, setExpenseDate] = useState('');
-    const [purpose, setPurpose] = useState('');
+    const [categories, setCategories] = useState([]);
+    const [categoryId, setCategoryId] = useState('');
+    const [otherPurpose, setOtherPurpose] = useState('');
     const [amount, setAmount] = useState('');
+    const [isLoadingCategories, setIsLoadingCategories] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
+    const [successMessage, setSuccessMessage] = useState('');
+
+    const [showNewCategory, setShowNewCategory] = useState(false);
+    const [newCategory, setNewCategory] = useState('');
+    const [isSavingCategory, setIsSavingCategory] = useState(false);
+    const [categoryError, setCategoryError] = useState('');
 
     useEffect(() => {
-        const today = new Date();
-        const localDate = new Date(today.getTime() - today.getTimezoneOffset() * 60_000)
-            .toISOString()
-            .slice(0, 10);
-        setExpenseDate(localDate);
+        setExpenseDate(todayString());
+
+        async function loadCategories() {
+            try {
+                const response = await fetch('/api/expense-categories', { cache: 'no-store' });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Unable to load expenses.');
+                setCategories(result.items);
+            } catch (error) {
+                setErrorMessage(error.message || 'Unable to load expenses.');
+            } finally {
+                setIsLoadingCategories(false);
+            }
+        }
+
+        loadCategories();
     }, []);
+
+    async function createCategory() {
+        setIsSavingCategory(true);
+        setCategoryError('');
+        try {
+            const response = await fetch('/api/expense-categories', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: newCategory }),
+            });
+            const result = await response.json();
+            if (!response.ok) {
+                const validationMessage = result.errors
+                    ? Object.values(result.errors).join(' ')
+                    : result.error;
+                throw new Error(validationMessage || 'Unable to save expense.');
+            }
+            setCategories((list) =>
+                [...list, result.item].sort((a, b) => a.name.localeCompare(b.name)),
+            );
+            setCategoryId(result.item.id);
+            setNewCategory('');
+            setShowNewCategory(false);
+        } catch (error) {
+            setCategoryError(error.message || 'Unable to save expense.');
+        } finally {
+            setIsSavingCategory(false);
+        }
+    }
 
     async function handleSubmit(event) {
         event.preventDefault();
         setIsSubmitting(true);
         setErrorMessage('');
+        setSuccessMessage('');
 
         try {
             const response = await fetch('/api/expenses', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ date: expenseDate, purpose, amount }),
+                body: JSON.stringify({ date: expenseDate, categoryId, otherPurpose, amount }),
             });
             const result = await response.json();
 
@@ -40,7 +94,10 @@ export default function ExpensePage() {
                 throw new Error(validationMessage || 'Unable to save expense.');
             }
 
-            router.push('/');
+            setSuccessMessage(`Marked ${result.expense.amount} for ${result.expense.purpose}.`);
+            setCategoryId('');
+            setOtherPurpose('');
+            setAmount('');
         } catch (error) {
             setErrorMessage(error.message || 'Unable to save expense.');
         } finally {
@@ -50,28 +107,16 @@ export default function ExpensePage() {
 
     return (
         <main className="flex min-h-screen items-center justify-center bg-gray-100 p-6">
-            <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
             <section
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="expense-dialog-title"
-                className="relative z-10 w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+                aria-labelledby="expense-title"
+                className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
             >
-                <div className="mb-5 flex items-center justify-between">
-                    <h1 id="expense-dialog-title" className="text-xl font-bold text-gray-900">
-                        mark your expences
-                    </h1>
-                    <Link
-                        href="/"
-                        aria-label="Close expense form"
-                        className="rounded-md px-3 py-1 text-2xl leading-none text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-                    >
-                        &times;
-                    </Link>
-                </div>
+                <h1 id="expense-title" className="mb-5 text-xl font-bold text-gray-900">
+                    Mark Your Expense
+                </h1>
                 <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                     <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
-                        Date
+                        Expense Date
                         <input
                             type="date"
                             value={expenseDate}
@@ -80,19 +125,102 @@ export default function ExpensePage() {
                             className="rounded-md border border-gray-300 px-3 py-2 text-gray-900"
                         />
                     </label>
+
+                    <div className="flex flex-col gap-1 text-sm font-medium text-gray-700">
+                        <label htmlFor="expense-for">Expense For</label>
+                        <div className="flex gap-2">
+                            <select
+                                id="expense-for"
+                                value={categoryId}
+                                onChange={(event) => setCategoryId(event.target.value)}
+                                required
+                                className="min-w-0 flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900"
+                            >
+                                <option value="" disabled>
+                                    {isLoadingCategories ? 'Loading expenses...' : 'Choose an expense'}
+                                </option>
+                                {categories.map((category) => (
+                                    <option key={category.id} value={category.id}>
+                                        {category.name}
+                                    </option>
+                                ))}
+                                <option value="other">Other</option>
+                            </select>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowNewCategory((shown) => !shown);
+                                    setCategoryError('');
+                                }}
+                                aria-expanded={showNewCategory}
+                                className="whitespace-nowrap rounded-md border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                            >
+                                + New
+                            </button>
+                        </div>
+                    </div>
+
+                    {showNewCategory && (
+                        <div className="flex flex-col gap-2 rounded-md bg-gray-50 p-3">
+                            <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
+                                New main expense
+                                <input
+                                    type="text"
+                                    value={newCategory}
+                                    onChange={(event) => setNewCategory(event.target.value)}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Enter') {
+                                            event.preventDefault();
+                                            if (newCategory.trim()) createCategory();
+                                        }
+                                    }}
+                                    maxLength={60}
+                                    placeholder="e.g. Food, Rent, Travel"
+                                    className="rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900"
+                                />
+                            </label>
+                            {categoryError && (
+                                <p role="alert" className="text-xs text-red-600">
+                                    {categoryError}
+                                </p>
+                            )}
+                            <div className="flex justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowNewCategory(false)}
+                                    className="rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={createCategory}
+                                    disabled={isSavingCategory || !newCategory.trim()}
+                                    className="rounded-md bg-gray-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
+                                >
+                                    {isSavingCategory ? 'Saving...' : 'Save expense'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {categoryId === 'other' && (
+                        <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
+                            Your Expense
+                            <input
+                                type="text"
+                                value={otherPurpose}
+                                onChange={(event) => setOtherPurpose(event.target.value)}
+                                required
+                                maxLength={60}
+                                placeholder="What was the expense for?"
+                                className="rounded-md border border-gray-300 px-3 py-2 text-gray-900"
+                            />
+                        </label>
+                    )}
+
                     <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
-                        Expense For
-                        <input
-                            type="text"
-                            value={purpose}
-                            onChange={(event) => setPurpose(event.target.value)}
-                            required
-                            placeholder="What was the expense for?"
-                            className="rounded-md border border-gray-300 px-3 py-2 text-gray-900"
-                        />
-                    </label>
-                    <label className="flex flex-col gap-1 text-sm font-medium text-gray-700">
-                        Mark Your Expense
+                        Amount
                         <input
                             type="number"
                             value={amount}
@@ -109,10 +237,15 @@ export default function ExpensePage() {
                             {errorMessage}
                         </p>
                     )}
+                    {successMessage && (
+                        <p role="status" className="text-sm text-emerald-700">
+                            {successMessage}
+                        </p>
+                    )}
                     <button
                         type="submit"
                         disabled={isSubmitting}
-                        className="rounded-lg bg-rose-600 px-4 py-2 font-semibold text-white shadow transition hover:bg-rose-700"
+                        className="rounded-lg bg-rose-600 px-4 py-2 font-semibold text-white shadow transition hover:bg-rose-700 disabled:opacity-60"
                     >
                         {isSubmitting ? 'Saving...' : 'Mark Your Expense'}
                     </button>
