@@ -121,3 +121,40 @@ export async function POST(request) {
         );
     }
 }
+
+// PUT /api/current-balance  { amount }
+// Sets the starting balance, creating it if it does not exist yet.
+export async function PUT(request) {
+    const user = await getAuthenticatedUser(request);
+    if (!user) return unauthorizedResponse();
+    if (user.role === 'superadmin') return forbiddenResponse();
+
+    const data = await request.json().catch(() => null);
+    const amount = Number(data?.amount);
+    if (data?.amount === '' || data?.amount === null || !Number.isFinite(amount) || amount < 0) {
+        return Response.json(
+            { errors: { amount: 'Enter a valid current balance.' } },
+            { status: 422 },
+        );
+    }
+
+    try {
+        await dbConnect();
+        const date = new Date();
+        date.setUTCHours(0, 0, 0, 0);
+        const saved = await Income.findOneAndUpdate(
+            { userId: user._id, source: 'opening_balance' },
+            { $set: { amount }, $setOnInsert: { date } },
+            { upsert: true, new: true, runValidators: true },
+        ).lean();
+        return Response.json({
+            openingBalance: { id: String(saved._id), amount: saved.amount, date: saved.date },
+        });
+    } catch (error) {
+        console.error('Failed to update current balance:', error);
+        return Response.json(
+            { error: 'Unable to save current balance. Please try again.' },
+            { status: 500 },
+        );
+    }
+}

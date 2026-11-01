@@ -89,6 +89,17 @@ const reminderLink = {
     ),
 };
 
+const todoLink = {
+    href: '/todo',
+    label: 'TO DO',
+    icon: (
+        <>
+            <rect x="3" y="4" width="18" height="17" rx="2" />
+            <path d="m8 12 2.5 2.5L16 9" />
+        </>
+    ),
+};
+
 const sourceLink = {
     href: '/sources',
     label: 'Source',
@@ -201,6 +212,7 @@ export default function SideNav() {
                     {renderLink(reminderLink)}
                     {renderLink(sourceLink)}
                     <Rentals className={`${itemClass} ${idleClass}`} />
+                    {renderLink(todoLink)}
                     <div className="my-3 border-t border-gray-800" />
                     {extraLinks.map(renderLink)}
                 </nav>
