@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import UserManager from './UserManager';
 
 function formatAmount(amount) {
     return Number(amount || 0).toLocaleString(undefined, {
@@ -55,7 +56,7 @@ export default function SuperAdminPage() {
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900">Super Admin Panel</h1>
                         <p className="mt-1 text-sm text-gray-600">
-                            Account income, expenses, and current balances
+                            Manage users and see their income, expenses, and current balances
                         </p>
                     </div>
                     <button
@@ -66,6 +67,10 @@ export default function SuperAdminPage() {
                         Sign out
                     </button>
                 </header>
+
+                <UserManager onChange={loadUsers} />
+
+                <h2 className="mb-3 text-lg font-bold text-gray-900">Account finances</h2>
 
                 {loading && <p role="status" className="text-sm text-gray-500">Loading accounts...</p>}
                 {errorMessage && <p role="alert" className="text-sm text-red-600">{errorMessage}</p>}

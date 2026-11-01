@@ -35,5 +35,15 @@ export async function ensureSuperAdmin() {
         throw new Error('The configured super-admin username is already used by a regular account.');
     }
 
+    // .env is the source of truth: if SUPER_ADMIN_PASSWORD changed, store the new one.
+    if (!(await bcrypt.compare(credentials.password, user.password))) {
+        user.password = await bcrypt.hash(credentials.password, 12);
+        await user.save();
+    }
+
     return user;
+}
+
+export function isEnvSuperAdmin(username) {
+    return Boolean(username) && username === getSuperAdminCredentials()?.username;
 }
