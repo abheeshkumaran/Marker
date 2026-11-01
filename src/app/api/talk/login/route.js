@@ -46,13 +46,8 @@ export async function POST(request) {
         });
     }
 
-    if (!superAdminCredentials) {
-        return Response.json(
-            { error: 'Super-admin credentials are not configured on the server.' },
-            { status: 503 },
-        );
-    }
-
+    // Accounts are checked against the database, so login still works when the
+    // SUPER_ADMIN_* env vars are missing (they are only needed to create the super-admin).
     const user = await User.findOne({ username: name }).select('+password username role');
 
     // No such user -> tell the client to offer registration.
@@ -78,14 +73,11 @@ export async function POST(request) {
         );
     }
 
-    if (user.role === 'superadmin') {
-        return Response.json({ errors: { username: 'Use the configured super-admin ID.' } }, { status: 422 });
-    }
-
+    const role = user.role === 'superadmin' ? 'superadmin' : 'user';
     await setSessionCookie({
         uid: user._id.toString(),
         username: user.username,
-        role: 'user',
+        role,
     });
-    return Response.json({ ok: true, username: user.username, role: 'user' });
+    return Response.json({ ok: true, username: user.username, role });
 }
