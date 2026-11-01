@@ -22,4 +22,9 @@ IncomeSchema.index(
     },
 );
 
+// In dev, hot reload re-runs this file; drop the cached model so schema edits take effect.
+if (process.env.NODE_ENV !== 'production' && mongoose.models.Income) {
+    mongoose.deleteModel('Income');
+}
+
 export default mongoose.models.Income || mongoose.model('Income', IncomeSchema);

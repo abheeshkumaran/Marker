@@ -25,4 +25,9 @@ const PaymentSchema = new mongoose.Schema(
     { timestamps: true },
 );
 
+// In dev, hot reload re-runs this file; drop the cached model so schema edits take effect.
+if (process.env.NODE_ENV !== 'production' && mongoose.models.Payment) {
+    mongoose.deleteModel('Payment');
+}
+
 export default mongoose.models.Payment || mongoose.model('Payment', PaymentSchema);

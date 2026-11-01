@@ -14,4 +14,9 @@ const ExpenseSchema = new mongoose.Schema(
     { timestamps: true, collection: 'expenses' },
 );
 
+// In dev, hot reload re-runs this file; drop the cached model so schema edits take effect.
+if (process.env.NODE_ENV !== 'production' && mongoose.models.Expense) {
+    mongoose.deleteModel('Expense');
+}
+
 export default mongoose.models.Expense || mongoose.model('Expense', ExpenseSchema);
