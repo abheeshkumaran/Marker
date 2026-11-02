@@ -52,6 +52,9 @@ export default async function dbConnect() {
         ensureUsableDns();
         cached.promise = mongoose
             .connect(uri, {
+                // Always use the app's database, even if the URI has no "/marker" path
+                // (MongoDB would otherwise fall back to "test").
+                dbName: process.env.MONGODB_DB || 'marker',
                 bufferCommands: false,
                 serverSelectionTimeoutMS: 10000,
             })
